@@ -4,7 +4,7 @@ import Container from "typedi";
 
 interface IIdentificationServiceParams {
   email: string;
-  phoneNumber: string;
+  phoneNumber: number;
 }
 
 interface IContact {
@@ -39,8 +39,9 @@ export default async function ({
   try {
     const prisma: PrismaClientType = Container.get("prisma");
     // check if phone number exists
+    if (phoneNumber === null) phoneNumber = -1;
     const commonPhoneNumbers: IContact[] = await prisma.contact.findMany({
-      where: { phoneNumber: phoneNumber },
+      where: { phoneNumber: phoneNumber.toString() },
     });
     const commonEmails: IContact[] = await prisma.contact.findMany({
       where: { email: email },
@@ -62,14 +63,14 @@ export default async function ({
 async function validateContacts(
   commonPhoneNumbers: IContact[],
   commonEmails: IContact[],
-  phoneNumber: string,
+  phoneNumber: number,
   email: string
 ) {
   const prisma: PrismaClientType = Container.get("prisma");
   if (commonPhoneNumbers.length === 0 && commonEmails.length === 0) {
     const addUser: IContact = await prisma.contact.create({
       data: {
-        phoneNumber: phoneNumber,
+        phoneNumber: phoneNumber.toString(),
         email: email,
         linkPrecedence: "primary",
       },
@@ -84,21 +85,26 @@ async function validateContacts(
   const primaryContact = commonContacts.filter(
     (contact) => contact.linkPrecedence === "primary"
   );
-  const secondaryContacts = await prisma.contact.findMany({
-    where: { linkedId: primaryContact[0].id },
+  let secondaryContacts = await prisma.contact.findMany({
+    where: { linkedId: primaryContact[0]?.id },
   });
+  secondaryContacts = Array.from(new Set([...secondaryContacts]));
   let isSecondaryContactPresent: boolean =
     secondaryContacts.filter(
       (contact) =>
-        contact.phoneNumber === phoneNumber && contact.email === email
+        contact.phoneNumber === phoneNumber.toString() &&
+        contact.email === email
     ).length !== 0;
-
+  // console.log(primaryContact.length);
+  // console.log(primaryContact);
+  // console.log(secondaryContacts);
+  // console.log(isSecondaryContactPresent);
   if (primaryContact.length === 1 && !isSecondaryContactPresent) {
     const secondaryUser: IContact = await prisma.contact.create({
       data: {
         email: email,
-        phoneNumber: phoneNumber,
-        linkedId: primaryContact[0].id,
+        phoneNumber: phoneNumber.toString(),
+        linkedId: primaryContact[0]?.id,
         linkPrecedence: "secondary",
       },
     });
@@ -115,20 +121,20 @@ async function validateContacts(
     if (timestamp1 < timestamp2) {
       // make timestamp2 secondary contact
       const updatedUser = await prisma.contact.update({
-        where: { id: primaryContact[1].id },
+        where: { id: primaryContact[1]?.id },
         data: {
-          linkedId: primaryContact[0].id,
+          linkedId: primaryContact[0]?.id,
           linkPrecedence: "secondary",
-          updatedAt: new Date(Date.now().toString()).toISOString(),
+          updatedAt: new Date(Date.now()).toISOString(),
         },
       });
       return ResponseBuilder(primaryContact[0], [updatedUser]);
     } else {
       // make timestamp1 primary contact
       const updatedUser = await prisma.contact.update({
-        where: { id: primaryContact[0].id },
+        where: { id: primaryContact[0]?.id },
         data: {
-          linkedId: primaryContact[1].id,
+          linkedId: primaryContact[1]?.id,
           linkPrecedence: "secondary",
           updatedAt: new Date(Date.now()).toISOString(),
         },
@@ -145,7 +151,7 @@ function ResponseBuilder(
   secondaryContactUsers = secondaryContactUsers || [];
   const responseObject = {
     contact: {
-      primaryContactId: primaryContactUser.id,
+      primaryContactId: primaryContactUser?.id,
       emails: Array.from(
         new Set([
           primaryContactUser.email,
@@ -159,8 +165,8 @@ function ResponseBuilder(
         ])
       ),
       secondaryContactIds: Array.from(
-        new Set([...secondaryContactUsers.map((contact) => contact.id)])
-      ),
+        new Set([...secondaryContactUsers.map((contact) => contact?.id)])
+      ).filter((id) => id !== primaryContactUser?.id),
     },
   };
   return responseObject;
