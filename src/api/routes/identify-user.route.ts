@@ -7,6 +7,7 @@ export default (router: Router) => {
   identificationRouter.post("/", async (req: Request, res: Response) => {
     try {
       const responseObject = await identificationService(req.body);
+      if (!responseObject) throw new Error("Failed to get user");
       res.send(responseObject);
     } catch (error) {
       console.error(error);
